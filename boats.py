@@ -22,7 +22,7 @@ def boats_get_post():
         client.put(new_boat)
 
         new_boat["id"] = new_boat.key.id
-        new_boat["self"] = request.base_url + str(new_boat.key.id)
+        new_boat["self"] = request.base_url + "/" + str(new_boat.key.id)
 
         return json.dumps(new_boat), 201
 

@@ -24,7 +24,7 @@ def loads_get_post():
         client.put(new_load)
 
         new_load["id"] = new_load.key.id
-        new_load["self"] = request.base_url + str(new_load.key.id)
+        new_load["self"] = request.base_url + "/" + str(new_load.key.id)
 
         return json.dumps(new_load), 201
 
