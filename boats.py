@@ -22,7 +22,7 @@ def boats_get_post():
         client.put(new_boat)
 
         new_boat["id"] = new_boat.key.id
-        new_boat["self"] = request.base_url + "/" + str(new_boat.key.id)
+        new_boat["self"] = request.base_url + str(new_boat.key.id)
 
         return json.dumps(new_boat), 201
 
@@ -68,9 +68,25 @@ def boats_get_put_delete(bid):
         client.put(boat)
         return '', 200
     elif request.method == 'DELETE':
-        key = client.key(constants.boats, int(bid))
-        client.delete(key)
-        return '', 200
+        boat_key = client.key(constants.boats, int(bid))
+        boat = client.get(key=boat_key)
+
+        # Checks if boat with boat_id exists
+        if not boat:
+            return {"Error": "No boat with this boat_id exists"}, 404
+
+        # Check to see if load(s) is/are on the boat; remove load(s) (carrier==None)
+        query = client.query(kind=constants.loads)
+        loads_list = list(query.fetch())
+
+        for curr_load in loads_list:
+            if curr_load["carrier"] and curr_load["carrier"]['id'] == bid:
+                curr_load.update({"carrier": None})
+                client.put(curr_load)
+
+        client.delete(boat_key)
+
+        return "", 204
 
     elif request.method == 'GET':
         boat_key = client.key(constants.boats, int(bid))
@@ -89,42 +105,92 @@ def boats_get_put_delete(bid):
         return 'Method not recognized'
 
 
-@bp.route('/<bid>/load/<lid>', methods=['PUT', 'DELETE'])
-def add_delete_reservation(bid, lid):
+@bp.route('/<bid>/loads/<lid>', methods=['PUT', 'DELETE'])
+def put_delete_loads_in_boat(bid, lid):
     if request.method == 'PUT':
+
+        # Gets boat
         boat_key = client.key(constants.boats, int(bid))
         boat = client.get(key=boat_key)
+
+        # Gets load
         load_key = client.key(constants.loads, int(lid))
         load = client.get(key=load_key)
 
-        if 'load' in boat.keys():
-            boat['load'].append(load.id)
+        print(bid, lid, boat, load)
+
+        # Check contents of the json file to make sure slip and boat exists
+        if not load or not boat:
+            return {"Error": "The specified boat and/or load does not exist"}, 404
+
+        elif load["carrier"]:
+            return {"Error": "The load is already loaded on another boat"}, 403
+
         else:
-            boat['load'] = [load.id]
+
+            boat['loads'].append({"id": lid, "self": request.root_url + "loads/" + str(load.key.id)})
+            load['carrier'] = {"id": bid, "name": boat['name'], "self": request.root_url + "boats/" + str(boat.key.id)}
+
         client.put(boat)
+        client.put(load)
+        return '', 204
 
-        return '', 200
+    elif request.method == 'DELETE':
 
-    if request.method == 'DELETE':
+        # Gets load
+        load_key = client.key(constants.loads, int(lid))
+        load = client.get(key=load_key)
+
+        # Gets boat
         boat_key = client.key(constants.boats, int(bid))
         boat = client.get(key=boat_key)
-        if 'load' in boat.keys():
-            boat['load'].remove(int(lid))
+
+        if boat:
+            boat_check = next((index for index, load in enumerate(boat['loads'])
+                               if load['id'] == lid), None)
+
+        # Check contents of the json file to make sure slip, boat exists,
+        # and boat is parked at this slip
+        if not load or not boat or load["carrier"] is None or \
+                load["carrier"]['id'] != bid or boat["loads"] == [] or \
+                boat_check is None:
+            return {"Error": "No boat with this boat_id is loaded with the load with this load_id"}, 404
+
+        else:
+            del boat['loads'][boat_check]
+            load["carrier"] = None
             client.put(boat)
-        return '', 200
+            client.put(load)
+
+            return '', 204
+
+    else:
+        return 'Method not recognized'
 
 
-@bp.route('/<bid>/load', methods=['GET'])
+@bp.route('/<bid>/loads', methods=['GET'])
 def get_reservations(bid):
     boat_key = client.key(constants.boats, int(bid))
     boat = client.get(key=boat_key)
-    load_list = []
+    load_list = {"self": request.root_url + "boats/" + bid, "loads": []}
 
-    if 'load' in boat.keys():
-        for lid in boat['load']:
-            load_key = client.key(constants.loads, int(lid))
-            load_list.append(load_key)
-        return json.dumps(client.get_multi(load_list))
+    # Check if boat exists
+    if not boat:
+        return {"Error": "No boat with this boat_id exists"}, 404
 
+    if boat['loads']:
+        for load in boat['loads']:
+            load_list['loads'].append(load)
+
+        return json.dumps(load_list), 200
+
+    # Boat has no loads
     else:
-        return json.dumps([])
+        return json.dumps([]), 200
+
+
+
+
+
+
+
