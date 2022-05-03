@@ -52,7 +52,7 @@ def loads_get_post():
         output = {"loads": results}
 
         if next_url:
-            output["self"] = next_url
+            output["next"] = next_url
 
         return json.dumps(output), 200
 
